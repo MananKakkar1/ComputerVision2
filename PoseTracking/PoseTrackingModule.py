@@ -1,5 +1,4 @@
 import cv2 as cv
-import time
 import mediapipe as mp
 
 class PoseTracker:
@@ -8,8 +7,6 @@ class PoseTracker:
         self.maxHands = maxHands
         self.detectionCon = detectionCon
         self.trackCon = trackCon
-        self.pTime = 0
-        self.cTime = 0
         self.mpDraw = mp.solutions.drawing_utils
         self.mpPose = mp.solutions.pose
         self.pose = self.mpPose.Pose(
@@ -21,35 +18,22 @@ class PoseTracker:
             min_detection_confidence=self.detectionCon,
             min_tracking_confidence=self.trackCon,
         )
-    
-    def startTracking(self):
-        videoInput = cv.VideoCapture(0)
-        self.pTime = time.time()
-        while True:
-            success, currImg = videoInput.read()
-            if not success:
-                continue
-            self._findPose(currImg, draw=True)
-            self.cTime = time.time()
-            fps = int(1 / max(self.cTime - self.pTime, 1e-6))
-            self.pTime = self.cTime
-            cv.putText(currImg, str(fps), (10, 70), cv.FONT_HERSHEY_COMPLEX, 3, (0, 0, 255), 3)
-            cv.imshow('Video', currImg)
-            if cv.waitKey(1) & 0xFF == ord('d'):
-                break
-        videoInput.release()
-        cv.destroyAllWindows()
-    
-    def _findPose(self, img, draw=True):
+        self.results = None
+
+    def findPose(self, img, draw: bool = True):
         imgRGB = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-        res = self.pose.process(imgRGB)
-        if res.pose_landmarks:
-            if draw:
-                self.mpDraw.draw_landmarks(img, res.pose_landmarks, self.mpPose.POSE_CONNECTIONS)
-                for id, lm in enumerate(res.pose_landmarks.landmark):
-                    height, width, c = img.shape
-                    cx, cy = int(lm.x * width), int(lm.y * height)
-                    # id represents the ID number of the hand tracking node
-                    # Now underneath, you can do something with each specific
-                    # id node.
-                    cv.circle(img, (cx, cy), 5, (0, 0, 255), cv.FILLED)
+        self.results = self.pose.process(imgRGB)
+        if self.results and self.results.pose_landmarks and draw:
+            self.mpDraw.draw_landmarks(img, self.results.pose_landmarks, self.mpPose.POSE_CONNECTIONS)
+        return img
+
+    def findPosition(self, img, draw: bool = True):
+        lmList = []
+        if self.results and self.results.pose_landmarks:
+            h, w, _ = img.shape
+            for id, lm in enumerate(self.results.pose_landmarks.landmark):
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                lmList.append([id, cx, cy])
+                if draw:
+                    cv.circle(img, (cx, cy), 4, (0, 0, 255), cv.FILLED)
+        return lmList
